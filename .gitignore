@@ -20,9 +20,12 @@ DerivedData
 *.hmap
 *.ipa
 *.xcuserstate
+project.xcworkspace
 
 # OS X
 .DS_Store
 
 # Node
 node_modules
+*.log
+.nvm

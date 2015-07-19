@@ -15,6 +15,8 @@
 
 @implementation RCTPickerManager
 
+RCT_EXPORT_MODULE()
+
 - (UIView *)view
 {
   return [[RCTPicker alloc] initWithEventDispatcher:self.bridge.eventDispatcher];
@@ -25,10 +27,10 @@ RCT_EXPORT_VIEW_PROPERTY(selectedIndex, NSInteger)
 
 - (NSDictionary *)constantsToExport
 {
-  RCTPicker *pv = [[RCTPicker alloc] init];
+  UIPickerView *view = [[UIPickerView alloc] init];
   return @{
-    @"ComponentHeight": @(CGRectGetHeight(pv.frame)),
-    @"ComponentWidth": @(CGRectGetWidth(pv.frame))
+    @"ComponentHeight": @(view.intrinsicContentSize.height),
+    @"ComponentWidth": @(view.intrinsicContentSize.width)
   };
 }
 

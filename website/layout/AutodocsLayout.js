@@ -13,6 +13,7 @@ var DocsSidebar = require('DocsSidebar');
 var H = require('Header');
 var Header = require('Header');
 var Marked = require('Marked');
+var Prism = require('Prism');
 var React = require('React');
 var Site = require('Site');
 var slugify = require('slugify');
@@ -30,6 +31,10 @@ var ComponentDoc = React.createClass({
 
     if (type.name === 'shape') {
       return '{' + Object.keys(type.value).map((key => key + ': ' + this.renderType(type.value[key]))).join(', ') + '}';
+    }
+
+    if (type.name == 'union') {
+      return type.value.map(this.renderType).join(', ');
     }
 
     if (type.name === 'arrayOf') {
@@ -83,7 +88,7 @@ var ComponentDoc = React.createClass({
     return (
       <div className="prop" key={name}>
         <Header level={4} className="propTitle" toSlug={name}>
-          <a href={slugify(name) + '.html#proptypes'}>{name} props...</a>
+          <a href={slugify(name) + '.html#props'}>{name} props...</a>
         </Header>
       </div>
     );
@@ -95,14 +100,18 @@ var ComponentDoc = React.createClass({
       <div className="compactProps">
         {(style.composes || []).map((name) => {
           var link;
-          if (name !== 'LayoutPropTypes') {
-            name = name.replace('StylePropTypes', '');
-            link =
-              <a href={slugify(name) + '.html#style'}>{name}#style...</a>;
-          } else {
+          if (name === 'LayoutPropTypes') {
             name = 'Flexbox';
             link =
               <a href={slugify(name) + '.html#proptypes'}>{name}...</a>;
+          } else if (name === 'TransformPropTypes') {
+            name = 'Transforms';
+            link =
+              <a href={slugify(name) + '.html#proptypes'}>{name}...</a>;
+          } else {
+            name = name.replace('StylePropTypes', '');
+            link =
+              <a href={slugify(name) + '.html#style'}>{name}#style...</a>;
           }
           return (
             <div className="prop" key={name}>
@@ -145,7 +154,11 @@ var ComponentDoc = React.createClass({
         <Marked>
           {content.description}
         </Marked>
-        <H level={3}>Props</H>
+
+        <HeaderWithGithub
+          title="Props"
+          path={content.filepath}
+        />
         {this.renderProps(content.props, content.composes)}
       </div>
     );
@@ -235,7 +248,9 @@ var APIDoc = React.createClass({
   render: function() {
     var content = this.props.content;
     if (!content.methods) {
-      return <div>Error</div>;
+      throw new Error(
+        'No component methods found for ' + content.componentName
+      );
     }
     return (
       <div>
@@ -248,7 +263,73 @@ var APIDoc = React.createClass({
   }
 });
 
+var HeaderWithGithub = React.createClass({
+
+  renderRunnableLink: function() {
+    if (this.props.metadata && this.props.metadata.runnable) {
+      return (
+        <a
+          className="run-example"
+          target="_blank"
+          href={'https://rnplay.org/apps/l3Zi2g?route='+this.props.metadata.title+'&file=' + this.props.metadata.title+ "Example.js"}>
+          Run this example
+        </a>
+      );
+    }
+  },
+
+  render: function() {
+    return (
+      <H level={3} toSlug={this.props.title}>
+        <a
+          className="edit-github"
+          href={'https://github.com/facebook/react-native/blob/master/' + this.props.path}>
+          Edit on GitHub
+        </a>
+        {this.renderRunnableLink()}
+        {this.props.title}
+      </H>
+    );
+  }
+});
+
 var Autodocs = React.createClass({
+  renderFullDescription: function(docs) {
+    if (!docs.fullDescription) {
+      return;
+    }
+    return (
+      <div>
+        <HeaderWithGithub
+          title="Description"
+          path={'docs/' + docs.componentName + '.md'}
+        />
+        <Marked>
+          {docs.fullDescription}
+        </Marked>
+      </div>
+    );
+  },
+
+  renderExample: function(docs, metadata) {
+    if (!docs.example) {
+      return;
+    }
+
+    return (
+      <div>
+        <HeaderWithGithub
+          title="Examples"
+          path={docs.example.path}
+          metadata={metadata}
+        />
+        <Prism>
+          {docs.example.content.replace(/^[\s\S]*?\*\//, '').trim()}
+        </Prism>
+      </div>
+    );
+  },
+
   render: function() {
     var metadata = this.props.metadata;
     var docs = JSON.parse(this.props.children);
@@ -264,9 +345,8 @@ var Autodocs = React.createClass({
             <a id="content" />
             <h1>{metadata.title}</h1>
             {content}
-            <Marked>
-              {docs.fullDescription}
-            </Marked>
+            {this.renderFullDescription(docs)}
+            {this.renderExample(docs, metadata)}
             <div className="docs-prevnext">
               {metadata.previous && <a className="docs-prev" href={metadata.previous + '.html#content'}>&larr; Prev</a>}
               {metadata.next && <a className="docs-next" href={metadata.next + '.html#content'}>Next &rarr;</a>}

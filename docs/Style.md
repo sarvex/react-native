@@ -37,14 +37,14 @@ All the attribute names and values are a subset of what works on the web. For la
 
 ## Using Styles
 
-All the core components accept a style attribute
+All the core components accept a style attribute.
 
 ```javascript
 <Text style={styles.base} />
 <View style={styles.background} />
 ```
 
-and also accepts an array of styles
+They also accept an array of styles.
 
 ```javascript
 <View style={[styles.base, styles.background]} />
@@ -91,3 +91,12 @@ var List = React.createClass({
 // ... in another file ...
 <List style={styles.list} elementStyle={styles.listElement} />
 ```
+## Supported Properties
+
+You can checkout latest support of CSS Properties in following Links.
+
+- [View Properties](/react-native/docs/view.html#style)
+- [Image Properties](/react-native/docs/image.html#style)
+- [Text Properties](/react-native/docs/text.html#style)
+- [Flex Properties](/react-native/docs/flexbox.html#content)
+- [Transform Properties](/react-native/docs/transforms.html#content)

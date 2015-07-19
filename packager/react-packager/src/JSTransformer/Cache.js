@@ -14,11 +14,9 @@ var declareOpts = require('../lib/declareOpts');
 var fs = require('fs');
 var isAbsolutePath = require('absolute-path');
 var path = require('path');
-var q = require('q');
+var Promise = require('promise');
 var tmpdir = require('os').tmpDir();
 var version = require('../../../../package.json').version;
-
-var Promise = q.Promise;
 
 var validateOpts = declareOpts({
   resetCache: {
@@ -31,6 +29,10 @@ var validateOpts = declareOpts({
   },
   projectRoots: {
     type: 'array',
+    required: true,
+  },
+  transformModulePath: {
+    type:'string',
     required: true,
   },
 });
@@ -72,11 +74,13 @@ Cache.prototype.get = function(filepath, loaderCb) {
 
 Cache.prototype._set = function(filepath, loaderPromise) {
   this._data[filepath] = loaderPromise.then(function(data) {
-    return [
+    return Promise.all([
       data,
-      q.nfbind(fs.stat)(filepath)
-    ];
-  }).spread(function(data, stat) {
+      Promise.denodeify(fs.stat)(filepath)
+    ]);
+  }).then(function(ref) {
+    var data = ref[0];
+    var stat = ref[1];
     this._persistEventually();
     return {
       data: data,
@@ -105,13 +109,13 @@ Cache.prototype._persistCache = function() {
   var data = this._data;
   var cacheFilepath = this._cacheFilePath;
 
-  this._persisting = q.all(_.values(data))
+  this._persisting = Promise.all(_.values(data))
     .then(function(values) {
       var json = Object.create(null);
       Object.keys(data).forEach(function(key, i) {
         json[key] = values[i];
       });
-      return q.nfbind(fs.writeFile)(cacheFilepath, JSON.stringify(json));
+      return Promise.denodeify(fs.writeFile)(cacheFilepath, JSON.stringify(json));
     })
     .then(function() {
       this._persisting = null;
@@ -163,6 +167,8 @@ function cacheFilePath(options) {
 
   var cacheVersion = options.cacheVersion || '0';
   hash.update(cacheVersion);
+
+  hash.update(options.transformModulePath);
 
   var name = 'react-packager-cache-' + hash.digest('hex');
   return path.join(tmpdir, name);

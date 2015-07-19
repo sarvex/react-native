@@ -23,6 +23,7 @@ var {
   Image
 } = React;
 
+exports.displayName = (undefined: ?string);
 exports.title = '<ScrollView>';
 exports.description = 'Component that enables scrolling through child components';
 exports.examples = [
@@ -33,7 +34,7 @@ exports.examples = [
     return (
       <ScrollView
         onScroll={() => { console.log('onScroll!'); }}
-        throttleScrollCallbackMS={200}
+        scrollEventThrottle={200}
         contentInset={{top: -50}}
         style={styles.scrollView}>
         {THUMBS.map(createThumbRow)}

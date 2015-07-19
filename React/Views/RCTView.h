@@ -13,16 +13,15 @@
 
 #import "RCTPointerEvents.h"
 
-typedef NS_ENUM(NSInteger, RCTBorderSide) {
-  RCTBorderSideTop,
-  RCTBorderSideRight,
-  RCTBorderSideBottom,
-  RCTBorderSideLeft
-};
-
 @protocol RCTAutoInsetsProtocol;
 
+@class RCTView;
+typedef void (^RCTViewEventHandler)(RCTView *view);
+
 @interface RCTView : UIView
+
+@property (nonatomic, copy) RCTViewEventHandler accessibilityTapHandler;
+@property (nonatomic, copy) RCTViewEventHandler magicTapHandler;
 
 /**
  * Used to control how touch events are processed.
@@ -56,7 +55,16 @@ typedef NS_ENUM(NSInteger, RCTBorderSide) {
 - (void)updateClippedSubviews;
 
 /**
- * Border colors.
+ * Border radii.
+ */
+@property (nonatomic, assign) CGFloat borderRadius;
+@property (nonatomic, assign) CGFloat borderTopLeftRadius;
+@property (nonatomic, assign) CGFloat borderTopRightRadius;
+@property (nonatomic, assign) CGFloat borderBottomLeftRadius;
+@property (nonatomic, assign) CGFloat borderBottomRightRadius;
+
+/**
+ * Border colors (actually retained).
  */
 @property (nonatomic, assign) CGColorRef borderTopColor;
 @property (nonatomic, assign) CGColorRef borderRightColor;

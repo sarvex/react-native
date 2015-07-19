@@ -9,6 +9,7 @@
 
 #import "RCTReachability.h"
 
+#import "RCTAssert.h"
 #import "RCTBridge.h"
 #import "RCTEventDispatcher.h"
 
@@ -24,6 +25,8 @@ static NSString *const RCTReachabilityStateCell = @"cell";
 }
 
 @synthesize bridge = _bridge;
+
+RCT_EXPORT_MODULE()
 
 static void RCTReachabilityCallback(__unused SCNetworkReachabilityRef target, SCNetworkReachabilityFlags flags, void *info)
 {
@@ -57,9 +60,12 @@ static void RCTReachabilityCallback(__unused SCNetworkReachabilityRef target, SC
 
 - (instancetype)initWithHost:(NSString *)host
 {
+  RCTAssertParam(host);
+  RCTAssert(![host hasPrefix:@"http"], @"Host value should just contain the domain, not the URL scheme.");
+
   if ((self = [super init])) {
     _status = RCTReachabilityStateUnknown;
-    _reachability = SCNetworkReachabilityCreateWithName(kCFAllocatorDefault, [host UTF8String]);
+    _reachability = SCNetworkReachabilityCreateWithName(kCFAllocatorDefault, host.UTF8String);
     SCNetworkReachabilityContext context = { 0, ( __bridge void *)self, NULL, NULL, NULL };
     SCNetworkReachabilitySetCallback(_reachability, RCTReachabilityCallback, &context);
     SCNetworkReachabilityScheduleWithRunLoop(_reachability, CFRunLoopGetMain(), kCFRunLoopCommonModes);
@@ -69,7 +75,7 @@ static void RCTReachabilityCallback(__unused SCNetworkReachabilityRef target, SC
 
 - (instancetype)init
 {
-  return [self initWithHost:@"http://apple.com"];
+  return [self initWithHost:@"apple.com"];
 }
 
 - (void)dealloc
@@ -81,11 +87,9 @@ static void RCTReachabilityCallback(__unused SCNetworkReachabilityRef target, SC
 #pragma mark - Public API
 
 // TODO: remove error callback - not needed except by Subscribable interface
-- (void)getCurrentReachability:(RCTResponseSenderBlock)getSuccess
-             withErrorCallback:(__unused RCTResponseSenderBlock)getError
+RCT_EXPORT_METHOD(getCurrentReachability:(RCTResponseSenderBlock)getSuccess
+                  withErrorCallback:(__unused RCTResponseSenderBlock)getError)
 {
-  RCT_EXPORT();
-
   getSuccess(@[@{@"network_reachability": _status}]);
 }
 

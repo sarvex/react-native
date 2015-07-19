@@ -32,7 +32,10 @@
 - (instancetype)initWithContentView:(UIView *)contentView
                     eventDispatcher:(RCTEventDispatcher *)eventDispatcher
 {
-  if (self = [super initWithNibName:nil bundle:nil]) {
+  RCTAssertParam(contentView);
+  RCTAssertParam(eventDispatcher);
+
+  if ((self = [super initWithNibName:nil bundle:nil])) {
     _contentView = contentView;
     _eventDispatcher = eventDispatcher;
     self.automaticallyAdjustsScrollViewInsets = NO;
@@ -43,11 +46,14 @@
 - (instancetype)initWithNavItem:(RCTNavItem *)navItem
                 eventDispatcher:(RCTEventDispatcher *)eventDispatcher
 {
-  if (self = [self initWithContentView:navItem eventDispatcher:eventDispatcher]) {
+  if ((self = [self initWithContentView:navItem eventDispatcher:eventDispatcher])) {
     _navItem = navItem;
   }
   return self;
 }
+
+RCT_NOT_IMPLEMENTED(-initWithNibName:(NSString *)nn bundle:(NSBundle *)nb)
+RCT_NOT_IMPLEMENTED(-initWithCoder:(NSCoder *)aDecoder)
 
 - (void)viewWillLayoutSubviews
 {
@@ -57,6 +63,20 @@
   _currentBottomLayoutGuide = self.bottomLayoutGuide;
 }
 
+static UIView *RCTFindNavBarShadowViewInView(UIView *view)
+{
+  if ([view isKindOfClass:[UIImageView class]] && view.bounds.size.height <= 1) {
+    return view;
+  }
+  for (UIView *subview in view.subviews) {
+    UIView *shadowView = RCTFindNavBarShadowViewInView(subview);
+    if (shadowView) {
+      return shadowView;
+    }
+  }
+  return nil;
+}
+
 - (void)viewWillAppear:(BOOL)animated
 {
   [super viewWillAppear:animated];
@@ -64,42 +84,30 @@
   // TODO: find a way to make this less-tightly coupled to navigation controller
   if ([self.parentViewController isKindOfClass:[UINavigationController class]])
   {
-
-    [self.navigationController setNavigationBarHidden:!_navItem animated:animated];
-    if (!_navItem) {
-      return;
-    }
-
-    self.navigationItem.title = _navItem.title;
+    [self.navigationController
+     setNavigationBarHidden:_navItem.navigationBarHidden
+     animated:animated];
 
     UINavigationBar *bar = self.navigationController.navigationBar;
-    if (_navItem.barTintColor) {
-      bar.barTintColor = _navItem.barTintColor;
-    }
-    if (_navItem.tintColor) {
-      BOOL canSetTintColor = _navItem.barTintColor == nil;
-      if (canSetTintColor) {
-        bar.tintColor = _navItem.tintColor;
-      }
-    }
-    if (_navItem.titleTextColor) {
-      [bar setTitleTextAttributes:@{NSForegroundColorAttributeName : _navItem.titleTextColor}];
-    }
+    bar.barTintColor = _navItem.barTintColor;
+    bar.tintColor = _navItem.tintColor;
+    bar.translucent = _navItem.translucent;
+    bar.titleTextAttributes = _navItem.titleTextColor ? @{
+      NSForegroundColorAttributeName: _navItem.titleTextColor
+    } : nil;
 
-    if (_navItem.rightButtonTitle.length > 0) {
-      self.navigationItem.rightBarButtonItem =
-      [[UIBarButtonItem alloc] initWithTitle:_navItem.rightButtonTitle
-                                       style:UIBarButtonItemStyleDone
-                                      target:self
-                                      action:@selector(handleNavRightButtonTapped)];
-    }
+    RCTFindNavBarShadowViewInView(bar).hidden = _navItem.shadowHidden;
 
-    if (_navItem.backButtonTitle.length > 0) {
-      self.navigationItem.backBarButtonItem =
-      [[UIBarButtonItem alloc] initWithTitle:_navItem.backButtonTitle
-                                       style:UIBarButtonItemStylePlain
-                                      target:nil
-                                      action:nil];
+    UINavigationItem *item = self.navigationItem;
+    item.title = _navItem.title;
+    item.backBarButtonItem = _navItem.backButtonItem;
+    if ((item.leftBarButtonItem = _navItem.leftButtonItem)) {
+      item.leftBarButtonItem.target = self;
+      item.leftBarButtonItem.action = @selector(handleNavLeftButtonTapped);
+    }
+    if ((item.rightBarButtonItem = _navItem.rightButtonItem)) {
+      item.rightBarButtonItem.target = self;
+      item.rightBarButtonItem.action = @selector(handleNavRightButtonTapped);
     }
   }
 }
@@ -112,6 +120,12 @@
   _wrapperView = [[UIView alloc] initWithFrame:_contentView.bounds];
   [_wrapperView addSubview:_contentView];
   self.view = _wrapperView;
+}
+
+- (void)handleNavLeftButtonTapped
+{
+  [_eventDispatcher sendInputEventWithName:@"topNavLeftButtonTap"
+                                      body:@{@"target":_navItem.reactTag}];
 }
 
 - (void)handleNavRightButtonTapped
@@ -127,7 +141,8 @@
   // finishes, be it a swipe to go back or a standard tap on the back button
   [super didMoveToParentViewController:parent];
   if (parent == nil || [parent isKindOfClass:[UINavigationController class]]) {
-    [self.navigationListener wrapperViewController:self didMoveToNavigationController:(UINavigationController *)parent];
+    [self.navigationListener wrapperViewController:self
+                     didMoveToNavigationController:(UINavigationController *)parent];
   }
 }
 

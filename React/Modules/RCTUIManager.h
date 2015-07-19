@@ -9,10 +9,10 @@
 
 #import <UIKit/UIKit.h>
 
-#import "../Base/RCTBridge.h"
-#import "../Base/RCTBridgeModule.h"
-#import "../Base/RCTInvalidating.h"
-#import "../Views/RCTViewManager.h"
+#import "RCTBridge.h"
+#import "RCTBridgeModule.h"
+#import "RCTInvalidating.h"
+#import "RCTViewManager.h"
 
 @protocol RCTScrollableProtocol;
 
@@ -30,16 +30,26 @@
 @property (nonatomic, readwrite, weak) id<UIScrollViewDelegate> nativeMainScrollDelegate;
 
 /**
- * Register a root view with the RCTUIManager. Theoretically, a single manager
- * can support multiple root views, however this feature is not currently exposed.
+ * Register a root view with the RCTUIManager.
  */
 - (void)registerRootView:(UIView *)rootView;
 
 /**
+ * Gets the view associated with a reactTag.
+ */
+- (UIView *)viewForReactTag:(NSNumber *)reactTag;
+
+/**
  * Update the frame of a root view. This might be in response to a screen rotation
- * or some other layout event outsde of the React-managed view hierarchy.
+ * or some other layout event outside of the React-managed view hierarchy.
  */
 - (void)setFrame:(CGRect)frame forRootView:(UIView *)rootView;
+
+/**
+ * Update the background color of a root view. This is usually triggered by
+ * manually setting the background color of the root view with native code.
+ */
+- (void)setBackgroundColor:(UIColor *)color forRootView:(UIView *)rootView;
 
 /**
  * Schedule a block to be executed on the UI thread. Useful if you need to execute

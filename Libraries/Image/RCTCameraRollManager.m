@@ -14,28 +14,30 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
- #import "RCTImageLoader.h"
+#import "RCTImageLoader.h"
 #import "RCTLog.h"
+#import "RCTUtils.h"
 
 @implementation RCTCameraRollManager
 
-- (void)saveImageWithTag:(NSString *)imageTag successCallback:(RCTResponseSenderBlock)successCallback errorCallback:(RCTResponseSenderBlock)errorCallback
-{
-  RCT_EXPORT();
+RCT_EXPORT_MODULE()
 
+RCT_EXPORT_METHOD(saveImageWithTag:(NSString *)imageTag
+                  successCallback:(RCTResponseSenderBlock)successCallback
+                  errorCallback:(RCTResponseErrorBlock)errorCallback)
+{
   [RCTImageLoader loadImageWithTag:imageTag callback:^(NSError *loadError, UIImage *loadedImage) {
     if (loadError) {
-      errorCallback(@[[loadError localizedDescription]]);
+      errorCallback(loadError);
       return;
     }
     [[RCTImageLoader assetsLibrary] writeImageToSavedPhotosAlbum:[loadedImage CGImage] metadata:nil completionBlock:^(NSURL *assetURL, NSError *saveError) {
       if (saveError) {
-        NSString *errorMessage = [NSString stringWithFormat:@"Error saving cropped image: %@", saveError];
-        RCTLogWarn(@"%@", errorMessage);
-        errorCallback(@[errorMessage]);
-        return;
+        RCTLogWarn(@"Error saving cropped image: %@", saveError);
+        errorCallback(saveError);
+      } else {
+        successCallback(@[[assetURL absoluteString]]);
       }
-      successCallback(@[[assetURL absoluteString]]);
     }];
   }];
 }
@@ -59,15 +61,17 @@
                }]);
 }
 
-- (void)getPhotos:(NSDictionary *)params callback:(RCTResponseSenderBlock)callback errorCallback:(RCTResponseSenderBlock)errorCallback
+RCT_EXPORT_METHOD(getPhotos:(NSDictionary *)params
+                  callback:(RCTResponseSenderBlock)callback
+                  errorCallback:(RCTResponseErrorBlock)errorCallback)
 {
-  RCT_EXPORT();
-
   NSUInteger first = [params[@"first"] integerValue];
   NSString *afterCursor = params[@"after"];
   NSString *groupTypesStr = params[@"groupTypes"];
   NSString *groupName = params[@"groupName"];
+  NSString *assetType = params[@"assetType"];
   ALAssetsGroupType groupTypes;
+
   if ([groupTypesStr isEqualToString:@"Album"]) {
     groupTypes = ALAssetsGroupAlbum;
   } else if ([groupTypesStr isEqualToString:@"All"]) {
@@ -91,7 +95,15 @@
 
   [[RCTImageLoader assetsLibrary] enumerateGroupsWithTypes:groupTypes usingBlock:^(ALAssetsGroup *group, BOOL *stopGroups) {
     if (group && (groupName == nil || [groupName isEqualToString:[group valueForProperty:ALAssetsGroupPropertyName]])) {
-      [group setAssetsFilter:ALAssetsFilter.allPhotos];
+
+      if (assetType == nil || [assetType isEqualToString:@"Photos"]) {
+        [group setAssetsFilter:ALAssetsFilter.allPhotos];
+      } else if ([assetType isEqualToString:@"Videos"]) {
+        [group setAssetsFilter:ALAssetsFilter.allVideos];
+      } else if ([assetType isEqualToString:@"All"]) {
+        [group setAssetsFilter:ALAssetsFilter.allAssets];
+      }
+
       [group enumerateAssetsWithOptions:NSEnumerationReverse usingBlock:^(ALAsset *result, NSUInteger index, BOOL *stopAssets) {
         if (result) {
           NSString *uri = [(NSURL *)[result valueForProperty:ALAssetPropertyAssetURL] absoluteString];
@@ -148,7 +160,7 @@
     if (error.code != ALAssetsLibraryAccessUserDeniedError) {
       RCTLogError(@"Failure while iterating through asset groups %@", error);
     }
-    errorCallback(@[error.description]);
+    errorCallback(error);
   }];
 }
 

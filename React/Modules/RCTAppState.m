@@ -35,6 +35,8 @@ static NSString *RCTCurrentAppBackgroundState()
 
 @synthesize bridge = _bridge;
 
+RCT_EXPORT_MODULE()
+
 #pragma mark - Lifecycle
 
 - (instancetype)init
@@ -46,16 +48,25 @@ static NSString *RCTCurrentAppBackgroundState()
     for (NSString *name in @[UIApplicationDidBecomeActiveNotification,
                              UIApplicationDidEnterBackgroundNotification,
                              UIApplicationDidFinishLaunchingNotification]) {
-
       [[NSNotificationCenter defaultCenter] addObserver:self
                                                selector:@selector(handleAppStateDidChange)
                                                    name:name
                                                  object:nil];
     }
+
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(handleMemoryWarning)
+                                                 name:UIApplicationDidReceiveMemoryWarningNotification
+                                               object:nil];
   }
   return self;
 }
 
+- (void)handleMemoryWarning
+{
+  [_bridge.eventDispatcher sendDeviceEventWithName:@"memoryWarning"
+                                              body:nil];
+}
 
 - (void)dealloc
 {
@@ -79,11 +90,9 @@ static NSString *RCTCurrentAppBackgroundState()
 /**
  * Get the current background/foreground state of the app
  */
-- (void)getCurrentAppState:(RCTResponseSenderBlock)callback
-                     error:(__unused RCTResponseSenderBlock)error
+RCT_EXPORT_METHOD(getCurrentAppState:(RCTResponseSenderBlock)callback
+                  error:(__unused RCTResponseSenderBlock)error)
 {
-  RCT_EXPORT();
-
   callback(@[@{@"app_state": _lastKnownState}]);
 }
 

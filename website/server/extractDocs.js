@@ -19,10 +19,66 @@ function getNameFromPath(filepath) {
   while (ext = path.extname(filepath)) {
     filepath = path.basename(filepath, ext);
   }
+
   if (filepath === 'LayoutPropTypes') {
     return 'Flexbox';
+  } else if (filepath === 'TransformPropTypes') {
+    return 'Transforms';
+  } else if (filepath === 'TabBarItemIOS') {
+    return 'TabBarIOS.Item';
   }
   return filepath;
+}
+
+function getExample(componentName) {
+  var path = '../Examples/UIExplorer/' + componentName + 'Example.js';
+  if (!fs.existsSync(path)) {
+    path = '../Examples/UIExplorer/' + componentName + 'Example.ios.js';
+    if (!fs.existsSync(path)) {
+      return;
+    }
+  }
+  return {
+    path: path.replace(/^\.\.\//, ''),
+    content: fs.readFileSync(path).toString(),
+  };
+}
+
+// Determines whether a component should have a link to a runnable example
+
+function isRunnable(componentName) {
+  if (componentName === 'AlertIOS') {
+    return true;
+  }
+
+  return false;
+}
+
+// Hide a component from the sidebar by making it return false from
+// this function
+function shouldDisplayInSidebar(componentName) {
+  if (componentName === 'Transforms') {
+    return false;
+  }
+
+  return true;
+}
+
+function getNextComponent(i) {
+  var next;
+  var filepath = all[i];
+
+  if (all[i + 1]) {
+    var nextComponentName = getNameFromPath(all[i + 1]);
+
+    if (shouldDisplayInSidebar(nextComponentName)) {
+      return slugify(nextComponentName);
+    } else {
+      return getNextComponent(i + 1);
+    }
+  } else {
+    return 'network';
+  }
 }
 
 function componentsToMarkdown(type, json, filepath, i, styles) {
@@ -33,20 +89,27 @@ function componentsToMarkdown(type, json, filepath, i, styles) {
     json.fullDescription = fs.readFileSync(docFilePath).toString();
   }
   json.type = type;
+  json.filepath = filepath.replace(/^\.\.\//, '');
+  json.componentName = componentName;
   if (styles) {
     json.styles = styles;
   }
+  json.example = getExample(componentName);
+
+  // Put Flexbox into the Polyfills category
+  var category = (type === 'style' ? 'Polyfills' : type + 's');
+  var next = getNextComponent(i);
 
   var res = [
     '---',
     'id: ' + slugify(componentName),
     'title: ' + componentName,
     'layout: autodocs',
-    'category: ' + (type === 'style' ? 'Polyfills' : type + 's'),
+    'category: ' + category,
     'permalink: docs/' + slugify(componentName) + '.html',
-    'next: ' + (all[i + 1] ?
-      slugify(getNameFromPath(all[i + 1])) :
-      'network'),
+    'next: ' + next,
+    'sidebar: ' + shouldDisplayInSidebar(componentName),
+    'runnable:' + isRunnable(componentName),
     '---',
     JSON.stringify(json, null, 2),
   ].filter(function(line) { return line; }).join('\n');
@@ -61,6 +124,7 @@ function renderComponent(filepath) {
     docgenHelpers.findExportedOrFirst,
     docgen.defaultHandlers.concat(docgenHelpers.stylePropTypeHandler)
   );
+
   return componentsToMarkdown('component', json, filepath, n++, styleDocs);
 }
 
@@ -83,6 +147,14 @@ function renderStyle(filepath) {
     docgenHelpers.findExportedObject,
     [docgen.handlers.propTypeHandler]
   );
+
+  // Remove deprecated transform props from docs
+  if (filepath === "../Libraries/StyleSheet/TransformPropTypes.js") {
+    ['rotation', 'scaleX', 'scaleY', 'translateX', 'translateY'].forEach(function(key) {
+      delete json['props'][key];
+    });
+  }
+
   return componentsToMarkdown('style', json, filepath, n++);
 }
 
@@ -96,11 +168,13 @@ var components = [
   '../Libraries/Components/Navigation/NavigatorIOS.ios.js',
   '../Libraries/Picker/PickerIOS.ios.js',
   '../Libraries/Components/ScrollView/ScrollView.js',
+  '../Libraries/Components/SegmentedControlIOS/SegmentedControlIOS.ios.js',
   '../Libraries/Components/SliderIOS/SliderIOS.js',
   '../Libraries/Components/SwitchIOS/SwitchIOS.ios.js',
   '../Libraries/Components/TabBarIOS/TabBarIOS.ios.js',
+  '../Libraries/Components/TabBarIOS/TabBarItemIOS.ios.js',
   '../Libraries/Text/Text.js',
-  '../Libraries/Components/TextInput/TextInput.ios.js',
+  '../Libraries/Components/TextInput/TextInput.js',
   '../Libraries/Components/Touchable/TouchableHighlight.js',
   '../Libraries/Components/Touchable/TouchableOpacity.js',
   '../Libraries/Components/Touchable/TouchableWithoutFeedback.js',
@@ -109,8 +183,8 @@ var components = [
 ];
 
 var apis = [
+  '../Libraries/ActionSheetIOS/ActionSheetIOS.js',
   '../Libraries/Utilities/AlertIOS.js',
-  '../Libraries/Animation/Animation.js',
   '../Libraries/AppRegistry/AppRegistry.js',
   '../Libraries/AppStateIOS/AppStateIOS.ios.js',
   '../Libraries/Storage/AsyncStorage.ios.js',
@@ -129,27 +203,29 @@ var apis = [
 
 var styles = [
   '../Libraries/StyleSheet/LayoutPropTypes.js',
+  '../Libraries/StyleSheet/TransformPropTypes.js',
   '../Libraries/Components/View/ViewStylePropTypes.js',
   '../Libraries/Text/TextStylePropTypes.js',
   '../Libraries/Image/ImageStylePropTypes.js',
 ];
 
 var polyfills = [
-  '../Libraries/GeoLocation/Geolocation.ios.js',
+  '../Libraries/GeoLocation/Geolocation.js',
 ];
 
 var all = components
   .concat(apis)
-  .concat(styles.slice(0, 1))
+  .concat(styles.slice(0, 2))
   .concat(polyfills);
 
-var styleDocs = styles.slice(1).reduce(function(docs, filepath) {
+var styleDocs = styles.slice(2).reduce(function(docs, filepath) {
   docs[path.basename(filepath).replace(path.extname(filepath), '')] =
     docgen.parse(
       fs.readFileSync(filepath),
       docgenHelpers.findExportedObject,
       [docgen.handlers.propTypeHandler]
     );
+
   return docs;
 }, {});
 
@@ -158,7 +234,7 @@ module.exports = function() {
   return [].concat(
     components.map(renderComponent),
     apis.map(renderAPI('api')),
-    styles.slice(0, 1).map(renderStyle),
+    styles.slice(0, 2).map(renderStyle),
     polyfills.map(renderAPI('Polyfill'))
   );
 };

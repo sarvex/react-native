@@ -36,8 +36,8 @@ var Dimensions = require('Dimensions');
  *
  * ```
  * var image = getImage({
- *   width: 200 * PixelRatio.get(),
- *   height: 100 * PixelRatio.get()
+ *   width: PixelRatio.getPixelSizeForLayoutSize(200),
+ *   height: PixelRatio.getPixelSizeForLayoutSize(100),
  * });
  * <Image source={image} style={{width: 200, height: 100}} />
  * ```
@@ -52,13 +52,38 @@ class PixelRatio {
    *     - iPhone 6
    *   - PixelRatio.get() === 3
    *     - iPhone 6 plus
+   *   - PixelRatio.get() === 3.5
+   *     - Nexus 6
    */
   static get(): number {
     return Dimensions.get('window').scale;
   }
-}
 
-// No-op for iOS, but used on the web. Should not be documented.
-PixelRatio.startDetecting = function() {};
+  /**
+   * Returns the scaling factor for font sizes. This is the ratio that is used to calculate the
+   * absolute font size, so any elements that heavily depend on that should use this to do
+   * calculations.
+   *
+   * If a font scale is not set, this returns the device pixel ratio.
+   *
+   * Currently this is only implemented on Android and reflects the user preference set in
+   * Settings > Display > Font size, on iOS it will always return the default pixel ratio.
+   */
+  static getFontScale(): number {
+    return Dimensions.get('window').fontScale || PixelRatio.get();
+  }
+
+  /**
+   * Converts a layout size (dp) to pixel size (px).
+   *
+   * Guaranteed to return an integer number.
+   */
+  static getPixelSizeForLayoutSize(layoutSize: number): number {
+    return Math.round(layoutSize * PixelRatio.get());
+  }
+
+  // No-op for iOS, but used on the web. Should not be documented.
+  static startDetecting() {}
+}
 
 module.exports = PixelRatio;

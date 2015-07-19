@@ -9,7 +9,11 @@
 
 #import "RCTRedBox.h"
 
+#import "RCTBridge.h"
+#import "RCTDefines.h"
 #import "RCTUtils.h"
+
+#if RCT_DEBUG
 
 @interface RCTRedBoxWindow : UIWindow <UITableViewDelegate, UITableViewDataSource>
 
@@ -25,14 +29,15 @@
   NSArray *_lastStackTrace;
 
   UITableViewCell *_cachedMessageCell;
+  UIColor *_redColor;
 }
 
 - (id)initWithFrame:(CGRect)frame
 {
   if ((self = [super initWithFrame:frame])) {
-
+    _redColor = [UIColor colorWithRed:0.8 green:0 blue:0 alpha:1];
     self.windowLevel = UIWindowLevelStatusBar + 5;
-    self.backgroundColor = [UIColor colorWithRed:0.8 green:0 blue:0 alpha:1];
+    self.backgroundColor = _redColor;
     self.hidden = YES;
 
     UIViewController *rootController = [[UIViewController alloc] init];
@@ -54,6 +59,7 @@
     [_rootView addSubview:_stackTraceTableView];
 
     UIButton *dismissButton = [UIButton buttonWithType:UIButtonTypeCustom];
+    dismissButton.accessibilityIdentifier = @"redbox-dismiss";
     dismissButton.titleLabel.font = [UIFont systemFontOfSize:14];
     [dismissButton setTitle:@"Dismiss (ESC)" forState:UIControlStateNormal];
     [dismissButton setTitleColor:[[UIColor whiteColor] colorWithAlphaComponent:0.5] forState:UIControlStateNormal];
@@ -61,6 +67,7 @@
     [dismissButton addTarget:self action:@selector(dismiss) forControlEvents:UIControlEventTouchUpInside];
 
     UIButton *reloadButton = [UIButton buttonWithType:UIButtonTypeCustom];
+    reloadButton.accessibilityIdentifier = @"redbox-reload";
     reloadButton.titleLabel.font = [UIFont systemFontOfSize:14];
     [reloadButton setTitle:@"Reload JS (\u2318R)" forState:UIControlStateNormal];
     [reloadButton setTitleColor:[[UIColor whiteColor] colorWithAlphaComponent:0.5] forState:UIControlStateNormal];
@@ -72,8 +79,22 @@
     reloadButton.frame = CGRectMake(buttonWidth, self.bounds.size.height - buttonHeight, buttonWidth, buttonHeight);
     [_rootView addSubview:dismissButton];
     [_rootView addSubview:reloadButton];
+
+    NSNotificationCenter *notificationCenter = [NSNotificationCenter defaultCenter];
+
+    [notificationCenter addObserver:self
+                           selector:@selector(dismiss)
+                               name:RCTReloadNotification
+                             object:nil];
   }
   return self;
+}
+
+RCT_NOT_IMPLEMENTED(-initWithCoder:(NSCoder *)aDecoder)
+
+- (void)dealloc
+{
+  [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 - (void)openStackFrameInEditor:(NSDictionary *)stackFrame
@@ -87,7 +108,7 @@
   [request setValue:postLength forHTTPHeaderField:@"Content-Length"];
   [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
 
-  [NSURLConnection sendAsynchronousRequest:request queue:[[NSOperationQueue alloc] init] completionHandler:nil];
+  [[[NSURLSession sharedSession] dataTaskWithRequest:request] resume];
 }
 
 - (void)showErrorMessage:(NSString *)message withStack:(NSArray *)stack showIfHidden:(BOOL)shouldShow
@@ -114,24 +135,24 @@
 - (void)dismiss
 {
   self.hidden = YES;
+  self.backgroundColor = _redColor;
   [self resignFirstResponder];
   [[[[UIApplication sharedApplication] delegate] window] makeKeyWindow];
 }
 
 - (void)reload
 {
-  [[NSNotificationCenter defaultCenter] postNotificationName:@"RCTReloadNotification" object:nil userInfo:nil];
-  [self dismiss];
+  [[NSNotificationCenter defaultCenter] postNotificationName:RCTReloadNotification object:nil userInfo:nil];
 }
 
 #pragma mark - TableView
 
-- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView
+- (NSInteger)numberOfSectionsInTableView:(__unused UITableView *)tableView
 {
   return 2;
 }
 
-- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section
+- (NSInteger)tableView:(__unused UITableView *)tableView numberOfRowsInSection:(NSInteger)section
 {
   return section == 0 ? 1 : [_lastStackTrace count];
 }
@@ -152,6 +173,7 @@
 {
   if (!cell) {
     cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"msg-cell"];
+    cell.textLabel.accessibilityIdentifier = @"redbox-error";
     cell.textLabel.textColor = [UIColor whiteColor];
     cell.textLabel.font = [UIFont boldSystemFontOfSize:16];
     cell.textLabel.lineBreakMode = NSLineBreakByWordWrapping;
@@ -172,6 +194,7 @@
     cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"cell"];
     cell.textLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.9];
     cell.textLabel.font = [UIFont fontWithName:@"Menlo-Regular" size:14];
+    cell.textLabel.numberOfLines = 2;
     cell.detailTextLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.7];
     cell.detailTextLabel.font = [UIFont fontWithName:@"Menlo-Regular" size:11];
     cell.detailTextLabel.lineBreakMode = NSLineBreakByTruncatingMiddle;
@@ -196,7 +219,7 @@
     CGRect boundingRect = [_lastErrorMessage boundingRectWithSize:CGSizeMake(tableView.frame.size.width - 30, CGFLOAT_MAX) options:NSStringDrawingUsesLineFragmentOrigin attributes:attributes context:nil];
     return ceil(boundingRect.size.height) + 40;
   } else {
-    return 44;
+    return 50;
   }
 }
 
@@ -242,6 +265,7 @@
 @implementation RCTRedBox
 {
   RCTRedBoxWindow *_window;
+  UIColor *_nextBackgroundColor;
 }
 
 + (instancetype)sharedInstance
@@ -252,6 +276,16 @@
     _sharedInstance = [[RCTRedBox alloc] init];
   });
   return _sharedInstance;
+}
+
+- (void)setNextBackgroundColor:(UIColor *)color
+{
+  _nextBackgroundColor = color;
+}
+
+- (void)showError:(NSError *)error
+{
+  [self showErrorMessage:error.localizedDescription withDetails:error.localizedFailureReason];
 }
 
 - (void)showErrorMessage:(NSString *)message
@@ -280,23 +314,16 @@
 
 - (void)showErrorMessage:(NSString *)message withStack:(NSArray *)stack showIfHidden:(BOOL)shouldShow
 {
-
-#if DEBUG
-
-  dispatch_block_t block = ^{
+  dispatch_async(dispatch_get_main_queue(), ^{
     if (!_window) {
       _window = [[RCTRedBoxWindow alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
     }
     [_window showErrorMessage:message withStack:stack showIfHidden:shouldShow];
-  };
-  if ([NSThread isMainThread]) {
-    block();
-  } else {
-    dispatch_async(dispatch_get_main_queue(), block);
-  }
-
-#endif
-
+    if (_nextBackgroundColor) {
+      _window.backgroundColor = _nextBackgroundColor;
+      _nextBackgroundColor = nil;
+    }
+  });
 }
 
 - (NSString *)currentErrorMessage
@@ -314,3 +341,22 @@
 }
 
 @end
+
+#else // Disabled
+
+@implementation RCTRedBox
+
++ (instancetype)sharedInstance { return nil; }
+- (void)showError:(NSError *)message {}
+- (void)showErrorMessage:(NSString *)message {}
+- (void)showErrorMessage:(NSString *)message withDetails:(NSString *)details {}
+- (void)showErrorMessage:(NSString *)message withStack:(NSArray *)stack {}
+- (void)updateErrorMessage:(NSString *)message withStack:(NSArray *)stack {}
+- (void)showErrorMessage:(NSString *)message withStack:(NSArray *)stack showIfHidden:(BOOL)shouldShow {}
+- (NSString *)currentErrorMessage { return nil; }
+- (void)setNextBackgroundColor:(UIColor *)color {}
+- (void)dismiss {}
+
+@end
+
+#endif

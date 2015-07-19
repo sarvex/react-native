@@ -8,36 +8,48 @@
  */
 'use strict';
 
+var path = require('path');
+
 // Don't forget to everything listed here to `testConfig.json`
 // modulePathIgnorePatterns.
 var sharedBlacklist = [
-  __dirname,
   'website',
   'node_modules/react-tools/src/utils/ImmutableObject.js',
   'node_modules/react-tools/src/core/ReactInstanceHandles.js',
   'node_modules/react-tools/src/event/EventPropagators.js'
 ];
 
-var webBlacklist = [
-  '.ios.js'
-];
-
-var iosBlacklist = [
-  'node_modules/react-tools/src/browser/ui/React.js',
-  'node_modules/react-tools/src/browser/eventPlugins/ResponderEventPlugin.js',
-  // 'node_modules/react-tools/src/vendor/core/ExecutionEnvironment.js',
-  '.web.js',
-  '.android.js',
-];
+var platformBlacklists = {
+  web: [
+    '.ios.js'
+  ],
+  ios: [
+    'node_modules/react-tools/src/browser/ui/React.js',
+    'node_modules/react-tools/src/browser/eventPlugins/ResponderEventPlugin.js',
+    'node_modules/react-tools/src/vendor/core/ExecutionEnvironment.js',
+    '.web.js',
+    '.android.js',
+  ],
+  android: [
+    'node_modules/react-tools/src/browser/ui/React.js',
+    'node_modules/react-tools/src/browser/eventPlugins/ResponderEventPlugin.js',
+    'node_modules/react-tools/src/browser/ReactTextComponent.js',
+    'node_modules/react-tools/src/vendor/core/ExecutionEnvironment.js',
+    '.web.js',
+    '.ios.js',
+  ],
+};
 
 function escapeRegExp(str) {
-  return str.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, '\\$&');
+  var escaped = str.replace(/[\-\[\]\{\}\(\)\*\+\?\.\\\^\$\|]/g, '\\$&');
+  // convert the '/' into an escaped local file separator
+  return escaped.replace(/\//g,'\\' + path.sep);
 }
 
-function blacklist(isWeb, additionalBlacklist) {
+function blacklist(platform, additionalBlacklist) {
   return new RegExp('(' +
     (additionalBlacklist || []).concat(sharedBlacklist)
-      .concat(isWeb ? webBlacklist : iosBlacklist)
+      .concat(platformBlacklists[platform] || [])
       .map(escapeRegExp)
       .join('|') +
     ')$'

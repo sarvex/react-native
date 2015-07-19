@@ -17,8 +17,7 @@ var PointPropType = require('PointPropType');
 var RCTScrollView = require('NativeModules').UIManager.RCTScrollView;
 var RCTScrollViewConsts = RCTScrollView.Constants;
 var React = require('React');
-var ReactIOSTagHandles = require('ReactIOSTagHandles');
-var ReactIOSViewAttributes = require('ReactIOSViewAttributes');
+var ReactNativeViewAttributes = require('ReactNativeViewAttributes');
 var RCTUIManager = require('NativeModules').UIManager;
 var ScrollResponder = require('ScrollResponder');
 var StyleSheet = require('StyleSheet');
@@ -26,27 +25,30 @@ var StyleSheetPropType = require('StyleSheetPropType');
 var View = require('View');
 var ViewStylePropTypes = require('ViewStylePropTypes');
 
-var createReactIOSNativeComponentClass = require('createReactIOSNativeComponentClass');
+var createReactNativeComponentClass = require('createReactNativeComponentClass');
 var deepDiffer = require('deepDiffer');
 var flattenStyle = require('flattenStyle');
 var insetsDiffer = require('insetsDiffer');
 var invariant = require('invariant');
 var pointsDiffer = require('pointsDiffer');
+var requireNativeComponent = require('requireNativeComponent');
 
 var PropTypes = React.PropTypes;
 
 var SCROLLVIEW = 'ScrollView';
 var INNERVIEW = 'InnerScrollView';
 
-var keyboardDismissModeConstants = {
-  'none': RCTScrollViewConsts.KeyboardDismissMode.None, // default
-  'interactive': RCTScrollViewConsts.KeyboardDismissMode.Interactive,
-  'onDrag': RCTScrollViewConsts.KeyboardDismissMode.OnDrag,
-};
-
 /**
  * Component that wraps platform ScrollView while providing
  * integration with touch locking "responder" system.
+ *
+ * Keep in mind that ScrollViews must have a bounded height in order to work,
+ * since they contain unbounded-height children into a bounded container (via
+ * a scroll interaction). In order to bound the height of a ScrollView, either
+ * set the height of the view directly (discouraged) or make sure all parent
+ * views have bounded height. Forgetting to transfer `{flex: 1}` down the
+ * view stack can lead to errors here, which the element inspector makes
+ * easy to debug.
  *
  * Doesn't yet support other contained responders from blocking this scroll
  * view from becoming the responder.
@@ -59,13 +61,26 @@ var ScrollView = React.createClass({
     contentOffset: PointPropType, // zeros
     onScroll: PropTypes.func,
     onScrollAnimationEnd: PropTypes.func,
-    scrollEnabled: PropTypes.bool, // tre
+    scrollEnabled: PropTypes.bool, // true
     scrollIndicatorInsets: EdgeInsetsPropType, // zeros
     showsHorizontalScrollIndicator: PropTypes.bool,
     showsVerticalScrollIndicator: PropTypes.bool,
     style: StyleSheetPropType(ViewStylePropTypes),
-    throttleScrollCallbackMS: PropTypes.number, // null
+    scrollEventThrottle: PropTypes.number, // null
 
+    /**
+     * When true, the scroll view bounces when it reaches the end of the
+     * content if the content is larger then the scroll view along the axis of
+     * the scroll direction. When false, it disables all bouncing even if
+     * the `alwaysBounce*` props are true. The default value is true.
+     */
+    bounces: PropTypes.bool,
+    /**
+     * When true, gestures can drive zoom past min/max and the zoom will animate
+     * to the min/max value at gesture end, otherwise the zoom will not exceed
+     * the limits.
+     */
+    bouncesZoom: PropTypes.bool,
     /**
      * When true, the scroll view bounces horizontally when it reaches the end
      * even if the content is smaller than the scroll view itself. The default
@@ -114,6 +129,16 @@ var ScrollView = React.createClass({
      */
     horizontal: PropTypes.bool,
     /**
+     * When true, the ScrollView will try to lock to only vertical or horizontal
+     * scrolling while dragging.  The default value is false.
+     */
+    directionalLockEnabled: PropTypes.bool,
+    /**
+     * When false, once tracking starts, won't try to drag if the touch moves.
+     * The default value is true.
+     */
+    canCancelContentTouches: PropTypes.bool,
+    /**
      * Determines whether the keyboard gets dismissed in response to a drag.
      *   - 'none' (the default), drags do not dismiss the keyboard.
      *   - 'onDrag', the keyboard is dismissed when a drag begins.
@@ -124,7 +149,7 @@ var ScrollView = React.createClass({
     keyboardDismissMode: PropTypes.oneOf([
       'none', // default
       'interactive',
-      'onDrag',
+      'on-drag',
     ]),
     /**
      * When false, tapping outside of the focused text input when the keyboard
@@ -163,7 +188,7 @@ var ScrollView = React.createClass({
     /**
      * Experimental: When true, offscreen child views (whose `overflow` value is
      * `hidden`) are removed from their native backing superview when offscreen.
-     * This canimprove scrolling performance on long lists. The default value is
+     * This can improve scrolling performance on long lists. The default value is
      * false.
      */
     removeClippedSubviews: PropTypes.bool,
@@ -183,13 +208,39 @@ var ScrollView = React.createClass({
     this.refs[SCROLLVIEW].setNativeProps(props);
   },
 
+  /**
+   * Returns a reference to the underlying scroll responder, which supports
+   * operations like `scrollTo`. All ScrollView-like components should
+   * implement this method so that they can be composed while providing access
+   * to the underlying scroll responder's methods.
+   */
+  getScrollResponder: function(): ReactComponent {
+    return this;
+  },
+
   getInnerViewNode: function(): any {
-    return this.refs[INNERVIEW].getNodeHandle();
+    return React.findNodeHandle(this.refs[INNERVIEW]);
   },
 
   scrollTo: function(destY?: number, destX?: number) {
-    RCTUIManager.scrollTo(
-      this.getNodeHandle(),
+    if (Platform.OS === 'android') {
+      RCTUIManager.dispatchViewManagerCommand(
+        React.findNodeHandle(this),
+        RCTUIManager.RCTScrollView.Commands.scrollTo,
+        [destX || 0, destY || 0]
+      );
+    } else {
+      RCTUIManager.scrollTo(
+        React.findNodeHandle(this),
+        destX || 0,
+        destY || 0
+      );
+    }
+  },
+
+  scrollWithoutAnimationTo: function(destY?: number, destX?: number) {
+    RCTUIManager.scrollWithoutAnimationTo(
+      React.findNodeHandle(this),
       destX || 0,
       destY || 0
     );
@@ -211,12 +262,12 @@ var ScrollView = React.createClass({
       );
     }
     if (__DEV__) {
-      if (this.props.onScroll && !this.props.throttleScrollCallbackMS) {
+      if (this.props.onScroll && !this.props.scrollEventThrottle) {
         var onScroll = this.props.onScroll;
         this.props.onScroll = function() {
           console.log(
             'You specified `onScroll` on a <ScrollView> but not ' +
-            '`throttleScrollCallbackMS`. You will only receive one event. ' +
+            '`scrollEventThrottle`. You will only receive one event. ' +
             'Using `16` you get all the events but be aware that it may ' +
             'cause frame drops, use a bigger number if you don\'t need as ' +
             'much precision.'
@@ -248,9 +299,6 @@ var ScrollView = React.createClass({
       ...this.props,
       alwaysBounceHorizontal,
       alwaysBounceVertical,
-      keyboardDismissMode: this.props.keyboardDismissMode ?
-        keyboardDismissModeConstants[this.props.keyboardDismissMode] :
-        undefined,
       style: ([styles.base, this.props.style]: ?Array<any>),
       onTouchStart: this.scrollResponderHandleTouchStart,
       onTouchMove: this.scrollResponderHandleTouchMove,
@@ -279,6 +327,13 @@ var ScrollView = React.createClass({
       } else {
         ScrollViewClass = AndroidScrollView;
       }
+      var keyboardDismissModeConstants = {
+        'none': RCTScrollViewConsts.KeyboardDismissMode.None, // default
+        'interactive': RCTScrollViewConsts.KeyboardDismissMode.Interactive,
+        'on-drag': RCTScrollViewConsts.KeyboardDismissMode.OnDrag,
+      };
+      props.keyboardDismissMode = props.keyboardDismissMode ?
+        keyboardDismissModeConstants[props.keyboardDismissMode] : undefined;
     }
     invariant(
       ScrollViewClass !== undefined,
@@ -304,10 +359,11 @@ var styles = StyleSheet.create({
 });
 
 var validAttributes = {
-  ...ReactIOSViewAttributes.UIView,
+  ...ReactNativeViewAttributes.UIView,
   alwaysBounceHorizontal: true,
   alwaysBounceVertical: true,
   automaticallyAdjustContentInsets: true,
+  bounces: true,
   centerContent: true,
   contentInset: {diff: insetsDiffer},
   contentOffset: {diff: pointsDiffer},
@@ -325,24 +381,21 @@ var validAttributes = {
   showsHorizontalScrollIndicator: true,
   showsVerticalScrollIndicator: true,
   stickyHeaderIndices: {diff: deepDiffer},
-  throttleScrollCallbackMS: true,
+  scrollEventThrottle: true,
   zoomScale: true,
 };
 
 if (Platform.OS === 'android') {
-  var AndroidScrollView = createReactIOSNativeComponentClass({
+  var AndroidScrollView = createReactNativeComponentClass({
     validAttributes: validAttributes,
-    uiViewClassName: 'AndroidScrollView',
+    uiViewClassName: 'RCTScrollView',
   });
-  var AndroidHorizontalScrollView = createReactIOSNativeComponentClass({
+  var AndroidHorizontalScrollView = createReactNativeComponentClass({
     validAttributes: validAttributes,
     uiViewClassName: 'AndroidHorizontalScrollView',
   });
 } else if (Platform.OS === 'ios') {
-  var RCTScrollView = createReactIOSNativeComponentClass({
-    validAttributes: validAttributes,
-    uiViewClassName: 'RCTScrollView',
-  });
+  var RCTScrollView = requireNativeComponent('RCTScrollView', ScrollView);
 }
 
 module.exports = ScrollView;

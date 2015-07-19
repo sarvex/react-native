@@ -16,9 +16,7 @@
 'use strict';
 
 var React = require('react-native');
-var StyleSheet = require('StyleSheet');
 var {
-  ActivityIndicatorIOS,
   StyleSheet,
   Text,
   TextInput,
@@ -44,6 +42,7 @@ var WebViewExample = React.createClass({
       backButtonEnabled: false,
       forwardButtonEnabled: false,
       loading: true,
+      scalesPageToFit: true,
     };
   },
 
@@ -95,10 +94,10 @@ var WebViewExample = React.createClass({
           automaticallyAdjustContentInsets={false}
           style={styles.webView}
           url={this.state.url}
-          renderError={this.renderError}
-          renderLoading={this.renderLoading}
+          javaScriptEnabledAndroid={true}
           onNavigationStateChange={this.onNavigationStateChange}
           startInLoadingState={true}
+          scalesPageToFit={this.state.scalesPageToFit}
         />
         <View style={styles.statusBar}>
           <Text style={styles.statusBarText}>{this.state.status}</Text>
@@ -126,34 +125,8 @@ var WebViewExample = React.createClass({
       url: navState.url,
       status: navState.title,
       loading: navState.loading,
+      scalesPageToFit: true
     });
-  },
-
-  renderError: function(errorDomain, errorCode, errorDesc) {
-    return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorTextTitle}>
-          Error loading page
-        </Text>
-        <Text style={styles.errorText}>
-          {'Domain: ' + errorDomain}
-        </Text>
-        <Text style={styles.errorText}>
-          {'Error Code: ' + errorCode}
-        </Text>
-        <Text style={styles.errorText}>
-          {'Description: ' + errorDesc}
-        </Text>
-      </View>
-    );
-  },
-
-  renderLoading: function() {
-    return (
-      <View style={styles.loadingView}>
-        <ActivityIndicatorIOS />
-      </View>
-    );
   },
 
   onSubmitEditing: function(event) {
@@ -230,28 +203,6 @@ var styles = StyleSheet.create({
     borderRadius: 3,
     alignSelf: 'stretch',
   },
-  loadingView: {
-    backgroundColor: BGWASH,
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: BGWASH,
-  },
-  errorTextTitle: {
-    fontSize: 15,
-    fontWeight: '500',
-    marginBottom: 10,
-  },
-  errorText: {
-    fontSize: 14,
-    textAlign: 'center',
-    marginBottom: 2,
-  },
   statusBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -268,6 +219,7 @@ var styles = StyleSheet.create({
   },
 });
 
+exports.displayName = (undefined: ?string);
 exports.title = '<WebView>';
 exports.description = 'Base component to display web content';
 exports.examples = [

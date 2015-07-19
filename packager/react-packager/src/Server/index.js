@@ -14,8 +14,11 @@ var declareOpts = require('../lib/declareOpts');
 var FileWatcher = require('../FileWatcher');
 var Packager = require('../Packager');
 var Activity = require('../Activity');
-var q = require('q');
+var AssetServer = require('../AssetServer');
+var Promise = require('promise');
 var _ = require('underscore');
+var exec = require('child_process').exec;
+var fs = require('fs');
 
 module.exports = Server;
 
@@ -57,7 +60,7 @@ var validateOpts = declareOpts({
   },
   assetExts: {
     type: 'array',
-    default: ['png'],
+    default: ['png', 'jpg', 'jpeg', 'bmp', 'gif', 'webp'],
   },
 });
 
@@ -68,13 +71,17 @@ function Server(options) {
   this._packages = Object.create(null);
   this._changeWatchers = [];
 
+  var assetGlobs = opts.assetExts.map(function(ext) {
+    return '**/*.' + ext;
+  });
+
   var watchRootConfigs = opts.projectRoots.map(function(dir) {
     return {
       dir: dir,
       globs: [
         '**/*.js',
-        '**/package.json',
-      ]
+        '**/*.json',
+      ].concat(assetGlobs),
     };
   });
 
@@ -83,9 +90,7 @@ function Server(options) {
       opts.assetRoots.map(function(dir) {
         return {
           dir: dir,
-          globs: opts.assetExts.map(function(ext) {
-            return '**/*.' + ext;
-          }),
+          globs: assetGlobs,
         };
       })
     );
@@ -95,8 +100,14 @@ function Server(options) {
     ? FileWatcher.createDummyWatcher()
     : new FileWatcher(watchRootConfigs);
 
+  this._assetServer = new AssetServer({
+    projectRoots: opts.projectRoots,
+    assetExts: opts.assetExts,
+  });
+
   var packagerOpts = Object.create(opts);
   packagerOpts.fileWatcher = this._fileWatcher;
+  packagerOpts.assetServer = this._assetServer;
   this._packager = new Packager(packagerOpts);
 
   var onFileChange = this._onFileChange.bind(this);
@@ -118,15 +129,16 @@ Server.prototype._onFileChange = function(type, filepath, root) {
 };
 
 Server.prototype._rebuildPackages = function() {
-  var buildPackage = this._buildPackage.bind(this);
+  var buildPackage = this.buildPackage.bind(this);
   var packages = this._packages;
-  Object.keys(packages).forEach(function(key) {
-    var options = getOptionsFromUrl(key);
+
+  Object.keys(packages).forEach(function(optionsJson) {
+    var options = JSON.parse(optionsJson);
     // Wait for a previous build (if exists) to finish.
-    packages[key] = (packages[key] || q()).finally(function() {
+    packages[optionsJson] = (packages[optionsJson] || Promise.resolve()).finally(function() {
       // With finally promise callback we can't change the state of the promise
       // so we need to reassign the promise.
-      packages[key] = buildPackage(options).then(function(p) {
+      packages[optionsJson] = buildPackage(options).then(function(p) {
         // Make a throwaway call to getSource to cache the source string.
         p.getSource({
           inlineSourceMap: options.inlineSourceMap,
@@ -135,7 +147,7 @@ Server.prototype._rebuildPackages = function() {
         return p;
       });
     });
-    return packages[key];
+    return packages[optionsJson];
   });
 };
 
@@ -154,24 +166,53 @@ Server.prototype._informChangeWatchers = function() {
 };
 
 Server.prototype.end = function() {
-  q.all([
+  Promise.all([
     this._fileWatcher.end(),
     this._packager.kill(),
   ]);
 };
 
-Server.prototype._buildPackage = function(options) {
+var packageOpts = declareOpts({
+  sourceMapUrl: {
+    type: 'string',
+    required: false,
+  },
+  entryFile: {
+    type: 'string',
+    required: true,
+  },
+  dev: {
+    type: 'boolean',
+    default: true,
+  },
+  minify: {
+    type: 'boolean',
+    default: false,
+  },
+  runModule: {
+    type: 'boolean',
+    default: true,
+  },
+  inlineSourceMap: {
+    type: 'boolean',
+    default: false,
+  },
+});
+
+Server.prototype.buildPackage = function(options) {
+  var opts = packageOpts(options);
+
   return this._packager.package(
-    options.main,
-    options.runModule,
-    options.sourceMapUrl,
-    options.dev
+    opts.entryFile,
+    opts.runModule,
+    opts.sourceMapUrl,
+    opts.dev
   );
 };
 
 Server.prototype.buildPackageFromUrl = function(reqUrl) {
   var options = getOptionsFromUrl(reqUrl);
-  return this._buildPackage(options);
+  return this.buildPackage(options);
 };
 
 Server.prototype.getDependencies = function(main) {
@@ -188,15 +229,15 @@ Server.prototype._processDebugRequest = function(reqUrl, res) {
     res.end(ret);
   } else if (parts[1] === 'packages') {
     ret += '<h1> Cached Packages </h1>';
-    q.all(Object.keys(this._packages).map(function(url) {
-      return this._packages[url].then(function(p) {
-        ret += '<div><h2>' + url + '</h2>';
+    Promise.all(Object.keys(this._packages).map(function(optionsJson) {
+      return this._packages[optionsJson].then(function(p) {
+        ret += '<div><h2>' + optionsJson + '</h2>';
         ret += p.getDebugInfo();
       });
     }, this)).then(
       function() { res.end(ret); },
       function(e) {
-        res.wrteHead(500);
+        res.writeHead(500);
         res.end('Internal Error');
         console.log(e.stack);
       }
@@ -230,6 +271,58 @@ Server.prototype._processOnChangeRequest = function(req, res) {
   });
 };
 
+Server.prototype._processAssetsRequest = function(req, res) {
+  var urlObj = url.parse(req.url, true);
+  var assetPath = urlObj.pathname.match(/^\/assets\/(.+)$/);
+  this._assetServer.get(assetPath[1])
+    .then(
+      function(data) {
+        res.end(data);
+      },
+      function(error) {
+        console.error(error.stack);
+        res.writeHead('404');
+        res.end('Asset not found');
+      }
+    ).done();
+};
+
+Server.prototype._processProfile = function(req, res) {
+  console.log('Dumping profile information...');
+  var dumpName = '/tmp/dump_' + Date.now() + '.json';
+  var prefix = process.env.TRACE_VIEWER_PATH || '';
+  var cmd = path.join(prefix, 'trace2html') + ' ' + dumpName;
+  fs.writeFileSync(dumpName, req.rawBody);
+  exec(cmd, function (error) {
+    if (error) {
+      if (error.code === 127) {
+        console.error(
+          '\n** Failed executing `' + cmd + '` **\n\n' +
+          'Google trace-viewer is required to visualize the data, do you have it installled?\n\n' +
+          'You can get it at:\n\n' +
+          '  https://github.com/google/trace-viewer\n\n' +
+          'If it\'s not in your path,  you can set a custom path with:\n\n' +
+          '  TRACE_VIEWER_PATH=/path/to/trace-viewer\n\n' +
+          'NOTE: Your profile data was kept at:\n\n' +
+          '  ' + dumpName
+        );
+      } else {
+        console.error('Unknown error', error);
+      }
+      res.end();
+      return;
+    } else {
+      exec('rm ' + dumpName);
+      exec('open ' + dumpName.replace(/json$/, 'html'), function (error) {
+        if (error) {
+          console.error(error);
+        }
+        res.end();
+      });
+    }
+  });
+};
+
 Server.prototype.processRequest = function(req, res, next) {
   var urlObj = url.parse(req.url, true);
   var pathname = urlObj.pathname;
@@ -245,6 +338,12 @@ Server.prototype.processRequest = function(req, res, next) {
   } else if (pathname.match(/^\/onchange\/?$/)) {
     this._processOnChangeRequest(req, res);
     return;
+  } else if (pathname.match(/^\/assets\//)) {
+    this._processAssetsRequest(req, res);
+    return;
+  } else if (pathname.match(/^\/profile\/?$/)) {
+    this._processProfile(req, res);
+    return;
   } else {
     next();
     return;
@@ -252,10 +351,11 @@ Server.prototype.processRequest = function(req, res, next) {
 
   var startReqEventId = Activity.startEvent('request:' + req.url);
   var options = getOptionsFromUrl(req.url);
-  var building = this._packages[req.url] || this._buildPackage(options);
+  var optionsJson = JSON.stringify(options);
+  var building = this._packages[optionsJson] || this.buildPackage(options);
 
-  this._packages[req.url] = building;
-    building.then(
+  this._packages[optionsJson] = building;
+  building.then(
     function(p) {
       if (requestType === 'bundle') {
         res.end(p.getSource({
@@ -280,7 +380,7 @@ function getOptionsFromUrl(reqUrl) {
   // node v0.11.14 bug see https://github.com/facebook/react-native/issues/218
   urlObj.query = urlObj.query || {};
 
-  var pathname = urlObj.pathname;
+  var pathname = decodeURIComponent(urlObj.pathname);
 
   // Backwards compatibility. Options used to be as added as '.' to the
   // entry module name. We can safely remove these options.
@@ -294,7 +394,7 @@ function getOptionsFromUrl(reqUrl) {
 
   return {
     sourceMapUrl: pathname.replace(/\.bundle$/, '.map'),
-    main: entryFile,
+    entryFile: entryFile,
     dev: getBoolOptionFromQuery(urlObj.query, 'dev', true),
     minify: getBoolOptionFromQuery(urlObj.query, 'minify'),
     runModule: getBoolOptionFromQuery(urlObj.query, 'runModule', true),
@@ -320,6 +420,12 @@ function handleError(res, error) {
   });
 
   if (error.type === 'TransformError' || error.type === 'NotFoundError') {
+    error.errors = [{
+      description: error.description,
+      filename: error.filename,
+      lineNumber: error.lineNumber,
+    }];
+    console.error(error);
     res.end(JSON.stringify(error));
   } else {
     console.error(error.stack || error);

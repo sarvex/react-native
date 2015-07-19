@@ -9,14 +9,14 @@
 'use strict';
 
 var fs = require('fs');
-var q = require('q');
+var Promise = require('promise');
 var Cache = require('./Cache');
-var _ = require('underscore');
 var workerFarm = require('worker-farm');
 var declareOpts = require('../lib/declareOpts');
 var util = require('util');
+var ModuleTransport = require('../lib/ModuleTransport');
 
-var readFile = q.nfbind(fs.readFile);
+var readFile = Promise.denodeify(fs.readFile);
 
 module.exports = Transformer;
 Transformer.TransformError = TransformError;
@@ -60,15 +60,16 @@ function Transformer(options) {
       resetCache: options.resetCache,
       cacheVersion: options.cacheVersion,
       projectRoots: options.projectRoots,
+      transformModulePath: options.transformModulePath,
     });
 
-  if (options.transformModulePath == null) {
-    this._failedToStart = q.Promise.reject(new Error('No transfrom module'));
-  } else {
+  if (options.transformModulePath != null) {
     this._workers = workerFarm(
       {autoStart: true, maxConcurrentCallsPerWorker: 1},
       options.transformModulePath
     );
+
+    this._transform = Promise.denodeify(this._workers);
   }
 }
 
@@ -82,32 +83,40 @@ Transformer.prototype.invalidateFile = function(filePath) {
 };
 
 Transformer.prototype.loadFileAndTransform = function(filePath) {
-  if (this._failedToStart) {
-    return this._failedToStart;
+  if (this._transform == null) {
+    return Promise.reject(new Error('No transfrom module'));
   }
 
-  var workers = this._workers;
+  var transform = this._transform;
   return this._cache.get(filePath, function() {
     return readFile(filePath)
       .then(function(buffer) {
         var sourceCode = buffer.toString();
 
-        return q.nfbind(workers)({
+        return transform({
           sourceCode: sourceCode,
           filename: filePath,
         }).then(
           function(res) {
             if (res.error) {
-              throw formatError(res.error, filePath, sourceCode);
+              console.warn(
+                'Error property on the result value form the transformer',
+                'module is deprecated and will be removed in future versions.',
+                'Please pass an error object as the first argument to the callback'
+              );
+              throw formatError(res.error, filePath);
             }
 
-            return {
+            return new ModuleTransport({
               code: res.code,
+              map: res.map,
               sourcePath: filePath,
-              sourceCode: sourceCode
-            };
+              sourceCode: sourceCode,
+            });
           }
         );
+      }).catch(function(err) {
+        throw formatError(err, filePath);
       });
   });
 };
@@ -116,8 +125,8 @@ function TransformError() {}
 util.inherits(TransformError, SyntaxError);
 
 function formatError(err, filename, source) {
-  if (err.lineNumber && err.column) {
-    return formatEsprimaError(err, filename, source);
+  if (err.loc) {
+    return formatBabelError(err, filename, source);
   } else {
     return formatGenericError(err, filename, source);
   }
@@ -126,7 +135,7 @@ function formatError(err, filename, source) {
 function formatGenericError(err, filename) {
   var msg = 'TransformError: ' + filename + ': ' + err.message;
   var error = new TransformError();
-  var stack = err.stack.split('\n').slice(0, -1);
+  var stack = (err.stack || '').split('\n').slice(0, -1);
   stack.push(msg);
   error.stack = stack.join('\n');
   error.message = msg;
@@ -134,26 +143,16 @@ function formatGenericError(err, filename) {
   return error;
 }
 
-function formatEsprimaError(err, filename, source) {
-  var stack = err.stack.split('\n');
-  stack.shift();
-
-  var msg = 'TransformError: ' + err.description + ' ' +  filename + ':' +
-    err.lineNumber + ':' + err.column;
-  var sourceLine = source.split('\n')[err.lineNumber - 1];
-  var snippet = sourceLine + '\n' + new Array(err.column - 1).join(' ') + '^';
-
-  stack.unshift(msg);
-
+function formatBabelError(err, filename) {
   var error = new TransformError();
-  error.message = msg;
   error.type = 'TransformError';
-  error.stack = stack.join('\n');
-  error.snippet = snippet;
+  error.message = (err.type || error.type) + ' ' + err.message;
+  error.stack = err.stack;
+  error.snippet = err.codeFrame;
+  error.lineNumber = err.loc.line;
+  error.column = err.loc.column;
   error.filename = filename;
-  error.lineNumber = err.lineNumber;
-  error.column = err.column;
-  error.description = err.description;
+  error.description = err.message;
   return error;
 }
 

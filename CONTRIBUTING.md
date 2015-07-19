@@ -19,11 +19,11 @@ The core team will be monitoring for pull requests. When we get one, we'll run s
 1. Fork the repo and create your branch from `master`.
 2. If you've added code that should be tested, add tests!
 3. If you've changed APIs, update the documentation.
-4. Ensure the test suite passes.
-5. Make sure your code lints - we've done our best to make sure these rules match our internal linting guidelines.
+4. Ensure tests pass on Travis.
+5. Make sure your code lints (`node linter.js <files touched>`).
 6. If you haven't already, complete the CLA.
 
-### Contributor License Agreement ("CLA")
+### Contributor License Agreement (CLA)
 
 In order to accept your pull request, we need you to submit a CLA. You only need to do this once, so if you've done this for another Facebook open source project, you're good to go. If you are submitting a pull request for the first time, just let us know that you have completed the CLA and we can cross-check with your GitHub username.
 
@@ -37,7 +37,7 @@ We will be using GitHub Issues for our public bugs. We will keep a close eye on 
 
 ### Reporting New Issues
 
-The best way to get your bug fixed is to provide a reduced test case.
+The best way to get your bug fixed is to provide a reduced test case. Please provide either a public repository with a runnable example or a [React Native Playground](https://rnplay.org/) snippet.
 
 ### Security Bugs
 
@@ -46,19 +46,33 @@ Facebook has a [bounty program](https://www.facebook.com/whitehat/) for the safe
 ## How to Get in Touch
 
 * IRC - [#reactnative on freenode](http://webchat.freenode.net/?channels=reactnative)
+* [Facebook group](https://www.facebook.com/groups/react.native.community/)
 
 ## Style Guide
 
 ### Code
 
-* Use semicolons;
+#### General
+
 * Add trailing commas,
 * 2 spaces for indentation (no tabs)
-* Prefer `'` over `"`
-* `'use strict';`
-* 80 character line length
 * "Attractive"
+
+#### JavaScript
+
+* Use semicolons;
+* `'use strict';`
+* Prefer `'` over `"`
 * Do not use the optional parameters of `setTimeout` and `setInterval`
+* 80 character line length
+
+#### Objective-C
+
+* Space after `@property` declarations
+* Brackets on *every* `if`, on the *same* line
+* `- method`, `@interface`, and `@implementation` brackets on the following line
+* *Try* to keep it around 80 characters line length (sometimes it's just not possible...)
+* `*` operator goes with the variable name (e.g. `NSObject *variableName;`)
 
 ### Documentation
 

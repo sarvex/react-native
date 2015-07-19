@@ -9,10 +9,10 @@ next: tutorial
 
 ## Requirements
 
-1. OS X - This repo only contains the iOS implementation right now, and Xcode only runs on Mac.
-2. New to Xcode?  [Download it](https://developer.apple.com/xcode/downloads/) from the Mac App Store.
+1. OS X - This repo only contains the iOS (7+) implementation right now, and Xcode only runs on Mac.
+2. [Xcode](https://developer.apple.com/xcode/downloads/) 6.3 or higher is recommended.
 3. [Homebrew](http://brew.sh/) is the recommended way to install node, watchman, and flow.
-4. `brew install node`. New to [node](https://nodejs.org/) or [npm](https://docs.npmjs.com/)?
+4. `brew install iojs && brew link iojs --force`. You may need to run `brew unlink node` if you have previously installed Node. New to [io.js](https://iojs.org/) or [npm](https://docs.npmjs.com/)?
 5. `brew install watchman`. We recommend installing [watchman](https://facebook.github.io/watchman/docs/install.html), otherwise you might hit a node file watching bug.
 6. `brew install flow`. If you want to use [flow](http://www.flowtype.org).
 
@@ -23,9 +23,10 @@ next: tutorial
 
 In the newly created folder `AwesomeProject/`
 
-- Open `AwesomeProject.xcodeproj` and hit run in Xcode
-- Open `index.ios.js` in your text editor of choice and edit some lines
-- Hit cmd+R ([twice](http://openradar.appspot.com/19613391)) in your iOS simulator to reload the app and see your change!
+- Open `AwesomeProject.xcodeproj` and hit run in Xcode.
+- Open `index.ios.js` in your text editor of choice and edit some lines.
+- Hit cmd+R in your iOS simulator to reload the app and see your change!
 
 Congratulations! You've just successfully run and modified your first React Native app.
 
+_If you run into any issues getting started, see the [troubleshooting page](/react-native/docs/troubleshooting.html#content)._

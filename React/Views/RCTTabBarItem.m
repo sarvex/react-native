@@ -25,24 +25,24 @@
   return _barItem;
 }
 
-- (void)setIcon:(NSString *)icon
+- (void)setIcon:(id)icon
 {
   static NSDictionary *systemIcons;
   static dispatch_once_t onceToken;
   dispatch_once(&onceToken, ^{
     systemIcons = @{
-      @"more": @(UITabBarSystemItemMore),
+      @"bookmarks": @(UITabBarSystemItemBookmarks),
+      @"contacts": @(UITabBarSystemItemContacts),
+      @"downloads": @(UITabBarSystemItemDownloads),
       @"favorites": @(UITabBarSystemItemFavorites),
       @"featured": @(UITabBarSystemItemFeatured),
-      @"topRated": @(UITabBarSystemItemTopRated),
-      @"recents": @(UITabBarSystemItemRecents),
-      @"contacts": @(UITabBarSystemItemContacts),
       @"history": @(UITabBarSystemItemHistory),
-      @"bookmarks": @(UITabBarSystemItemBookmarks),
+      @"more": @(UITabBarSystemItemMore),
+      @"most-recent": @(UITabBarSystemItemMostRecent),
+      @"most-viewed": @(UITabBarSystemItemMostViewed),
+      @"recents": @(UITabBarSystemItemRecents),
       @"search": @(UITabBarSystemItemSearch),
-      @"downloads": @(UITabBarSystemItemDownloads),
-      @"mostRecent": @(UITabBarSystemItemMostRecent),
-      @"mostViewed": @(UITabBarSystemItemMostViewed),
+      @"top-rated": @(UITabBarSystemItemTopRated),
     };
   });
 
@@ -54,7 +54,7 @@
   UIImage *image = [RCTConvert UIImage:_icon];
   UITabBarItem *oldItem = _barItem;
   if (image) {
-
+    
     // Recreate barItem if previous item was a system icon
     if (wasSystemIcon) {
       _barItem = nil;

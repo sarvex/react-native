@@ -10,12 +10,14 @@
 
 jest
   .dontMock('underscore')
-  .dontMock('path')
   .dontMock('absolute-path')
-  .dontMock('crypto')
   .dontMock('../Cache');
 
-var q = require('q');
+jest
+  .mock('os')
+  .mock('fs');
+
+var Promise = require('promise');
 
 describe('JSTransformer Cache', function() {
   var Cache;
@@ -30,10 +32,14 @@ describe('JSTransformer Cache', function() {
 
   describe('getting/setting', function() {
     it('calls loader callback for uncached file', function() {
-      var cache = new Cache({projectRoots: ['/rootDir']});
-      var loaderCb = jest.genMockFn().mockImpl(function() {
-        return q();
+      var cache = new Cache({
+        projectRoots: ['/rootDir'],
+        transformModulePath: 'x.js',
       });
+      var loaderCb = jest.genMockFn().mockImpl(function() {
+        return Promise.resolve();
+      });
+
       cache.get('/rootDir/someFile', loaderCb);
       expect(loaderCb).toBeCalledWith('/rootDir/someFile');
     });
@@ -46,10 +52,15 @@ describe('JSTransformer Cache', function() {
           }
         });
       });
-      var cache = new Cache({projectRoots: ['/rootDir']});
-      var loaderCb = jest.genMockFn().mockImpl(function() {
-        return q('lol');
+
+      var cache = new Cache({
+        projectRoots: ['/rootDir'],
+        transformModulePath: 'x.js',
       });
+      var loaderCb = jest.genMockFn().mockImpl(function() {
+        return Promise.resolve('lol');
+      });
+
       return cache.get('/rootDir/someFile', loaderCb).then(function(value) {
         expect(value).toBe('lol');
       });
@@ -63,10 +74,15 @@ describe('JSTransformer Cache', function() {
           }
         });
       });
-      var cache = new Cache({projectRoots: ['/rootDir']});
-      var loaderCb = jest.genMockFn().mockImpl(function() {
-        return q('lol');
+
+      var cache = new Cache({
+        projectRoots: ['/rootDir'],
+        transformModulePath: 'x.js',
       });
+      var loaderCb = jest.genMockFn().mockImpl(function() {
+        return Promise.resolve('lol');
+      });
+
       return cache.get('/rootDir/someFile', loaderCb).then(function() {
         var shouldNotBeCalled = jest.genMockFn();
         return cache.get('/rootDir/someFile', shouldNotBeCalled)
@@ -124,8 +140,12 @@ describe('JSTransformer Cache', function() {
     });
 
     pit('should load cache from disk', function() {
-      var cache = new Cache({projectRoots: ['/rootDir']});
+      var cache = new Cache({
+        projectRoots: ['/rootDir'],
+        transformModulePath: 'x.js',
+      });
       var loaderCb = jest.genMockFn();
+
       return cache.get('/rootDir/someFile', loaderCb).then(function(value) {
         expect(loaderCb).not.toBeCalled();
         expect(value).toBe('oh hai');
@@ -150,9 +170,12 @@ describe('JSTransformer Cache', function() {
         return 123;
       };
 
-      var cache = new Cache({projectRoots: ['/rootDir']});
+      var cache = new Cache({
+        projectRoots: ['/rootDir'],
+        transformModulePath: 'x.js',
+      });
       var loaderCb = jest.genMockFn().mockImpl(function() {
-        return q('new value');
+        return Promise.resolve('new value');
       });
 
       return cache.get('/rootDir/someFile', loaderCb).then(function(value) {
@@ -191,15 +214,19 @@ describe('JSTransformer Cache', function() {
         });
       });
 
-      var cache = new Cache({projectRoots: ['/rootDir']});
+      var cache = new Cache({
+        projectRoots: ['/rootDir'],
+        transformModulePath: 'x.js',
+      });
+
       cache.get('/rootDir/bar', function() {
-        return q('bar value');
+        return Promise.resolve('bar value');
       });
       cache.get('/rootDir/foo', function() {
-        return q('foo value');
+        return Promise.resolve('foo value');
       });
       cache.get('/rootDir/baz', function() {
-        return q('baz value');
+        return Promise.resolve('baz value');
       });
 
       jest.runAllTicks();
