@@ -1,48 +1,78 @@
 [ignore]
+; We fork some components by platform
+.*/*[.]android.js
 
-# We fork some components by platform.
-.*/*.web.js
-.*/*.android.js
+; Ignore templates for 'react-native init'
+<PROJECT_ROOT>/packages/react-native/template/.*
 
-# Some modules have their own node_modules with overlap
-.*/node_modules/node-haste/.*
+; Ignore the Dangerfile
+<PROJECT_ROOT>/packages/react-native-bots/dangerfile.js
 
-# Ignore react-tools where there are overlaps, but don't ignore anything that
-# react-native relies on
-.*/node_modules/react-tools/src/vendor/core/ExecutionEnvironment.js
-.*/node_modules/react-tools/src/browser/eventPlugins/ResponderEventPlugin.js
-.*/node_modules/react-tools/src/browser/ui/React.js
-.*/node_modules/react-tools/src/core/ReactInstanceHandles.js
-.*/node_modules/react-tools/src/event/EventPropagators.js
+; Ignore "BUCK" generated dirs
+<PROJECT_ROOT>/\.buckd/
 
-# Ignore commoner tests
-.*/node_modules/commoner/test/.*
+; Flow doesn't support platforms
+.*/packages/react-native/Libraries/Utilities/LoadingView.js
 
-# See https://github.com/facebook/flow/issues/442
-.*/react-tools/node_modules/commoner/lib/reader.js
+.*/node_modules/resolve/test/resolver/malformed_package_json/package\.json$
 
-# Ignore jest
-.*/node_modules/jest-cli/.*
-
-# Ignore Website
-.*/website/.*
+[untyped]
+.*/node_modules/@react-native-community/cli/.*/.*
 
 [include]
 
+[declarations]
+.*/node_modules/.*
+
 [libs]
-Libraries/react-native/react-native-interface.js
-Examples/UIExplorer/ImageMocks.js
+packages/react-native/interface.js
+packages/react-native/flow/
+packages/react-native/flow-typed/
 
 [options]
-module.system=haste
+enums=true
+
+emoji=true
+
+exact_by_default=true
+
+format.bracket_spacing=false
+
+module.file_ext=.js
+module.file_ext=.json
+module.file_ext=.ios.js
+
+munge_underscores=true
+
+module.name_mapper='^react-native$' -> '<PROJECT_ROOT>/packages/react-native/index.js'
+module.name_mapper='^react-native/\(.*\)$' -> '<PROJECT_ROOT>/packages/react-native\1'
+module.name_mapper='^@?[./a-zA-Z0-9$_-]+\.\(bmp\|gif\|jpg\|jpeg\|png\|psd\|svg\|webp\|m4v\|mov\|mp4\|mpeg\|mpg\|webm\|aac\|aiff\|caf\|m4a\|mp3\|wav\|html\|pdf\)$' -> '<PROJECT_ROOT>/packages/react-native/Libraries/Image/RelativeImageStub'
 
 suppress_type=$FlowIssue
 suppress_type=$FlowFixMe
-suppress_type=$FixMe
+suppress_type=$FlowFixMeProps
+suppress_type=$FlowFixMeState
+suppress_type=$FlowFixMeEmpty
 
-suppress_comment=\\(.\\|\n\\)*\\$FlowFixMe\\($\\|[^(]\\|(\\(>=0\\.\\(1[0-3]\\|[0-9]\\).[0-9]\\)? *\\(site=[a-z,_]*react_native[a-z,_]*\\)?)\\)
-suppress_comment=\\(.\\|\n\\)*\\$FlowIssue\\((\\(>=0\\.\\(1[0-3]\\|[0-9]\\).[0-9]\\)? *\\(site=[a-z,_]*react_native[a-z,_]*\\)?)\\)? #[0-9]+
-suppress_comment=\\(.\\|\n\\)*\\$FlowFixedInNextDeploy
+[lints]
+sketchy-null-number=warn
+sketchy-null-mixed=warn
+sketchy-number=warn
+untyped-type-import=warn
+nonstrict-import=warn
+deprecated-type=error
+unsafe-getters-setters=warn
+unnecessary-invariant=warn
+unused-promise=error
+
+[strict]
+deprecated-type
+nonstrict-import
+sketchy-null
+unclear-type
+unsafe-getters-setters
+untyped-import
+untyped-type-import
 
 [version]
-0.13.1
+^0.204.0
